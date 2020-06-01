@@ -18,6 +18,17 @@ from keras.layers import LSTM, Dense
 from keras.datasets import mnist
 from keras.utils import np_utils
 
+import os
+os.environ["PYTHONHASHSEED"] = '0'
+import random as rn
+import tensorflow as tf
+
+np.random.seed(50)
+rn.seed(12346)
+session_conf = tf.compat.v1.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
+tf.compat.v1.set_random_seed(1234)
+sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph(), config=session_conf)
+tf.compat.v1.keras.backend.set_session(sess)
 
 # 转成DataFrame格式方便数据处理
 x_train_pd = pd.read_excel("xxl.xlsx")
@@ -29,16 +40,6 @@ y_valid_pd = pd.read_excel("ycs.xlsx")
 # print(y_train_pd.head())
 
 
-# x_train_pd=x_train_pd.values
-# y_train_pd=y_train_pd.values
-# x_valid_pd=x_valid_pd.values
-# y_valid_pd=y_valid_pd.values
-
-
-# x_train_pd=x_train_pd.reshape(1,8,89)
-# y_train_pd=y_train_pd.reshape(1,1,89)
-# x_valid_pd=x_valid_pd.reshape(1,8,24)
-# y_valid_pd=y_valid_pd.reshape(1,1,24)
 
 # 训练集归一化
 min_max_scaler = MinMaxScaler()
@@ -64,14 +65,12 @@ y_valid_pd=y_valid_pd.values
 
 x_train = x_train.reshape((x_train.shape[0], 1, x_train.shape[1]))
 y_train = y_train.reshape((y_train.shape[0], 1, y_train.shape[1]))
-
 x_valid = x_valid.reshape((x_valid.shape[0], 1, x_valid.shape[1]))
-
 y_valid = y_valid.reshape((y_valid.shape[0], 1, y_valid.shape[1]))
 
 
 
-def create_model():
+def create_model(learning_rate=0.6, momentum=0.65):
     model = Sequential()  # 初始化，很重要！
     # model.add(Dense(units = 10,   # 输出大小
     #                 activation='relu',  # 激励函数
@@ -80,14 +79,14 @@ def create_model():
     #                )
     #          )
     
-    model.add(LSTM(10,input_shape=(x_train.shape[1],x_train.shape[2]), activation='relu', kernel_initializer='lecun_uniform',   return_sequences=True  ))    
+    model.add(LSTM(20,input_shape=(x_train.shape[1],x_train.shape[2]), activation='relu', kernel_initializer='lecun_uniform',return_sequences=True))    
     
     
     
     
-    model.add(Dropout(0.1))  # 丢弃神经元链接概率
+    model.add(Dropout(0.2))  # 丢弃神经元链接概率
     
-    model.add(Dense(units = 15,
+    model.add(Dense(units = 20,
     #                 kernel_regularizer=regularizers.l2(0.01),  # 施加在权重上的正则项
     #                 activity_regularizer=regularizers.l1(0.01),  # 施加在输出上的正则项
                     activation='relu', # 激励函数
@@ -105,15 +104,15 @@ def create_model():
     # print(model.summary())  # 打印网络层次结构
     
     model.compile(loss='mse',  # 损失均方误差
-                  optimizer=keras.optimizers.sgd(lr=0.1),  # 优化器
+                  optimizer=keras.optimizers.sgd(lr=learning_rate),  # 优化器
                   
                  )
     
-    reduce_lr = ReduceLROnPlateau(monitor='loss', patience=10, mode='auto')#设定学习率
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss',factor=0.8, patience=30, mode='auto')#设定学习率
     
     history = model.fit(x_train, y_train,
-              epochs=1000, # 迭代次数
-              batch_size=200,  # 每次用来梯度下降的批处理数据大小
+              epochs=3000, # 迭代次数
+              batch_size=300,  # 每次用来梯度下降的批处理数据大小
               verbose=0,  # verbose：日志冗长度，int：冗长度，0：不输出训练过程，1：输出训练进度，2：输出每一个epoch
               validation_data = (x_valid, y_valid),  # 验证集
               callbacks=[reduce_lr]
@@ -146,12 +145,14 @@ def create_model():
 
 create_model()
 
-model = scikit_learn.KerasRegressor(build_fn=create_model, epochs=100,batch_size=500,verbose=0)
 
-batch_size = [500,1000,2000,3000]
-epochs = [100,200,300,500]
+model = scikit_learn.KerasRegressor(build_fn=create_model,verbose=0)
 
-param_grid = dict(batch_size=batch_size, epochs=epochs)
+batch_size = [500,1500,3000]
+epochs = [100,300,500]
+learning_rate = [0.2, 0.3,0.4,0.5,0.6]
+momentum = [0.1,0.2,0.3,0.4,0.5,0.65,0.8,0.9,0.95]
+param_grid = dict(momentum=momentum)
 grid = GridSearchCV(estimator=model, param_grid=param_grid, n_jobs=-1,verbose=0)
 grid_result = grid.fit(x_train, y_train)
 
